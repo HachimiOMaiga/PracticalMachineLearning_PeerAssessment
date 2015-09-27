@@ -1,0 +1,127 @@
+Pratical Machine Learning Peer Assessment: Personnal Activity Prediction Using Machine Learning
+================================================================================================
+
+### Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+### Data Sources
+The training and test data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The original source of the data is: http://groupware.les.inf.puc-rio.br/har.
+
+### Data processing and transformation
+
+- Load libraries and set seed for reproducibility.
+- Load the data and process it. 
+
+### How the Model is built
+
+The outcome variable is classe, which is a factor variable with 5 levels. These 5 levels represent the 5 different fashions in which participants performed 1 set of 10 repetitions of the Unilateral Dumbbell Biceps Curl.
+
+- exactly according to the specification (Class A)
+- throwing the elbows to the front (Class B)
+- lifting the dumbbell only halfway (Class C)
+- lowering the dumbbell only halfway (Class D)
+- throwing the hips to the front (Class E)
+
+Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes.The Prediction evaluation is carried out with the aim of maximizing the accuracy and minimizing the out-of-sample error. All the other availables are used for prediction. 2 prediction models are tested using decision tree and random forest algorithms and a confisuion matrix is displayed. 
+
+Decision tree and random forest algorithms are known for their ability of detecting features that are important for classification. Feature selection is inherent, so it is not so necessary at the data preparation phase. Thus, there won't be any feature selection section in this report.
+
+### How Cross Validation is used
+
+Cross-validation is carried out by subsampling the training data randomly without replacement into 2 subsamples: the trainingSubset (60% of the original training set) and validation set (25%). The model is fitted on the trainingSubset data, and tested on the validation data. Once the most accurate model is choosen, it is be tested on the original testing data set.
+
+### Expected Output of Sample Error
+
+The expected out-of-sample error corresponds to the quantity: 1 - accuracy in the cross-validation data. Accuracy is the proportion of correct classified observation over the total sample in the validation  set. Expected accuracy is the expected accuracy in the out-of-sample data set (i.e. original testing data set). Thus, the expected value of the out-of-sample error will correspond to the expected number of missclassified observations/total observations in the Test data set, which is the quantity: 1 - accuracy found from the cross-validation data set.
+
+### The code and results
+
+```{r}
+# Load necessary packages
+library(knitr)
+library(ElemStatLearn)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+
+# For reproducibility, a pseudo-random number generator is set to 100.
+set.seed(100)
+
+# Assume that the data have been downloaded and stored in the working directory.
+trainingData <- read.csv("pml-training.csv", header = TRUE, na.strings = c("NA", "#DIV/0!", ""))
+testingData <- read.csv("pml-testing.csv", header = TRUE, na.strings = c("NA", "#DIV/0!", ""))
+
+### Disregard the non needed id column 
+##trainingData <- trainingData[,-1]
+##testingData <- testingData[,-1]
+
+# Some variables are irrelevant to the prediction: user_name, raw_timestamp_part_1, raw_timestamp_part_,2 cvtd_timestamp, new_window, and  num_window (columns 1 to 7). We can delete these variables.
+trainingData   <- trainingData[, -c(1:7)]
+testingData <- testingData[, -c(1:7)]
+
+# Delete columns with all missing values
+trainingData <- trainingData[, colSums(is.na(trainingData)) == 0]
+testingData <- testingData[, colSums(is.na(testingData)) == 0]
+
+# Partition the training data into training and validation sets
+inTrain = createDataPartition(trainingData$classe, p = 0.60, list=FALSE)
+trainingSubset = trainingData[inTrain,]
+validation = trainingData[-inTrain,]
+
+### Remove non needed columns for training set
+##neededCol <- c((colSums(!is.na(trainingSubset[, -ncol(trainingSubset)])) >= 0.6*nrow(trainingSubset)))
+##trainingSubset   <-  trainingSubset[, neededCol]
+##validation <- validation[, neededCol]
+
+### Remove non needed columns for testing set
+##neededColTestSet <- c((colSums(!is.na(testingData[, -ncol(testingData)])) >= 0.6*nrow(testingData)))
+##testingData <- testingData[, neededColTestSet]
+
+# Decision Tree model
+dtModelFit <- rpart(classe ~ ., data = trainingSubset, method = "class")
+dtPrediction <- predict(dtModelFit, validation, type = "class")
+
+# Plot of the Decision Tree
+rpart.plot(dtModelFit, main = "Classification Tree", extra = 102, under = TRUE, faclen = 0)
+
+# Test results on our validation data set
+confusionMatrix(dtPrediction, validation$classe)
+
+# Random Forest model
+rfModelFit <- randomForest(classe ~ ., data = trainingSubset)
+rfPredict <- predict(rfModelFit, validation, type = "class")
+
+# Test results on our validation data set
+confusionMatrix(rfPredict, validation$classe)
+
+```
+
+### Final model test
+
+The Random Forest algorithm seem to have performed better than the Decision Tree algorithm. Accuracy for Random Forest model is 0.9992  (95% CI: (0.9983, 0.9997)) compared to 0.8715 (95% CI: (0.8639, 0.8789)) for the Decision Tree model. Hence, the random Forest model is used for the final test below. The expected out-of-sample error, calculated as 1 - accuracy for predictions made against the cross-validation set, is estimated at 0.0008, or 0.08%. 
+```{r}
+# Prediction on initial testing data set using Random Forest
+predictTestingData <- predict(rfModelFit, testingData, type="class")
+predictTestingData
+```
+
+```{r}
+# Write files for submission
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_", i, ".txt")
+    write.table(x[i], file=filename, quote = FALSE, row.names = FALSE, col.names=FALSE)
+  }
+}
+
+pml_write_files(predictTestingData)
+
+```
